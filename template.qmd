@@ -1,6 +1,6 @@
 ---
 title: "Lab 3 Key"
-author: "Nathaniel Grimes"
+author: "Samuel A. Cervantes"
 format: html
 ---
 ## Load in data and packages
@@ -17,6 +17,30 @@ t_df<-read_csv(here("data", "titanic_survival.csv"))
 ## ML Framework
 
 Write a description of how you go about applying machine learning problems. If you drew a diagram, share with a neighbor and discuss.
+
+1. what's your research question
+
+2. gather data 
+   develop hypothesis 
+   methodology map out the plan to get pseudo code
+   clean data/what variables
+   look at the data/exploratory data analysis
+   
+3. choosing metrics
+
+4. data split / into testing and training
+
+5. build model 
+  a. create our model options 
+  b. data preprocessing 
+  c. train model
+  d. tune our model 
+  e. evaluate performance
+  f. model selection
+  
+6. finalize the model (aka train it on whole data set)
+
+7. interpret results/ visualize/ communicate
 
 
 
@@ -43,6 +67,25 @@ Take 15 minutes to explore the data. Are there any immediate changes to the data
 
 
 
+```{r}
+
+surv_df <- t_df %>%
+  mutate(survived = factor(survived),   ### categorical outcome variables need to be factors
+         pclass   = factor(pclass)) %>% ### turn some predictors to factor
+  select(-cabin, -ticket) ### lots of NAs here - and not likely to be very helpful
+
+ggplot(surv_df, aes(x = age, fill = survived)) +
+  geom_histogram()
+
+ggplot(surv_df, aes(x = pclass, fill = survived)) +
+  geom_bar()
+
+ggplot(surv_df, aes(x = sex, fill = survived)) + 
+  geom_bar()
+```
+variables to include: class, age, sex, embark, fare
+
+
 ## Data Split
 
 We will set aside (“partition”) a portion of the data for building and comparing our models (80%), and a portion for testing our models after we’ve selected the best one (20%). NOT the same as folds - that will happen in the training/validation step.
@@ -54,6 +97,7 @@ surv_df %>%
   summarize(n = n()) %>%
   ungroup() %>%
   mutate(prop = n / sum(n))
+
 ```
 
 
@@ -63,9 +107,10 @@ Tidymodels will split the data and label it for us.
 set.seed(123)
 
 surv_split <- initial_split(surv_df, prop = 0.80,strata = survived)
-  ### stratified on `survived`; training and test splits will both have ~60/40% survived = 0/1
+                                         
 surv_train_df <- training(surv_split)
 surv_test_df <- testing(surv_split)
+
 
 ```
 
@@ -148,7 +193,18 @@ Now fill in the following code chunk to fit the lasso model. Create a table (or 
 
 
 ```{r}
+lasso_wf <- workflow() %>%
+  add_recipe(lasso_rec) %>%
+  add_model(lasso_md) 
 
+lasso_fit <- lasso_wf %>%
+  fit(surv_train_df)
+
+lasso_test <- surv_test_df |>
+  mutate(predict(lasso_fit, new_data = surv_test_df)) |> 
+  mutate(predict(lasso_fit,new_data = surv_test_df, type='prob'))
+
+table(lasso_test$survived, lasso_test$.pred_class)
 
 ```
 
@@ -168,7 +224,12 @@ lasso_test |>
 Calculate the `ROC AUC` for each model. Use the `roc_auc` function from yardstick.
 
 ```{r}
+### Calculate area under curve - 50% is random guessing, 100% is perfect classifier
+log_test |> 
+  yardstick::roc_auc(truth = survived, .pred_0)
 
+lasso_test |> 
+  yardstick::roc_auc(truth = survived, .pred_0)
 ```
 
 
@@ -183,7 +244,7 @@ set.seed(12)
 
 folds<-vfold_cv(surv_train_df, v=10, strata = survived)
 
-log_fit_folds<- log_fit |> 
+log_fit_folds<- log_wf |> 
   fit_resamples(folds)
 
 collect_metrics(log_fit_folds)
@@ -229,7 +290,7 @@ final_log |>
   extract_fit_parsnip() |>
   tidy() |> 
   mutate(odds=exp(estimate),
-         prob=odds/(1+estimate))
+         prob=odds/(1+odds))
 ```
 
 Please give this a go on your own with the post-lab exercise. I will be walking around to assist.
